@@ -1,4 +1,5 @@
- <?php
+<?php
+
 if(isset($_POST['keyword']))
   $cache_time = 1;
 else
@@ -82,11 +83,108 @@ function formatTimeLength($length) {
 	}
 	return $result;
 }
-$now = time();
 
 if (isset($_GET['cid'])) {
-	
-	 require_once("contest-check.php");
+	$cid = intval($_GET['cid']);
+	$view_cid = $cid;
+	//print $cid;
+
+	//check contest valid
+	$sql = "SELECT * FROM `contest` WHERE `contest_id`=?";
+	$result = pdo_query($sql,$cid);
+
+	$rows_cnt = count($result);
+	$contest_ok = true;
+	$password = "";
+
+	if (isset($_POST['password']))
+		$password = $_POST['password'];
+
+	if (get_magic_quotes_gpc()) {
+		$password = stripslashes($password);
+	}
+
+	if ($rows_cnt==0) {
+		$view_title = "比赛已经关闭!";
+	}
+	else{
+		$row = $result[0];
+		$view_private = $row['private'];
+
+		if ($password!="" && $password==$row['password'])
+			$_SESSION[$OJ_NAME.'_'.'c'.$cid] = true;
+
+		if ($row['private'] && !isset($_SESSION[$OJ_NAME.'_'.'c'.$cid]))  //无密码，跳转至错误界面
+			$contest_ok = false;
+
+//		if($row['defunct']=='Y')  //defunct problem not in contest/exam list
+//			$contest_ok = false;
+
+		if (isset($_SESSION[$OJ_NAME.'_'.'administrator']) || isset($_SESSION[$OJ_NAME.'_'.'contest_creator']))
+			$contest_ok = true;
+
+		$now = time();
+		$training_length=$row['training_length']; //训练时长
+		$ftraining_date=strtotime($row['ftraining_date']); //补题赛时间
+		$start_time = strtotime($row['start_time']);
+		$end_time = strtotime($row['end_time']);
+		$view_description = $row['description'];
+		$view_title = $row['title'];
+		$view_start_time = $row['start_time'];
+		$view_end_time = $row['end_time'];
+		if (!isset($_SESSION[$OJ_NAME.'_'.'administrator']) && $now<$start_time) {
+			$view_errors = "<center>";
+			$view_errors .= "<h3>$MSG_CONTEST_ID : $view_cid - $view_title</h3>";
+			$view_errors .= "<p>$view_description</p>";
+			$view_errors .= "<br>";
+			$view_errors .= "<span class=text-success>$MSG_TIME_WARNING</span>";
+			$view_errors .= "</center>";
+			$view_errors .= "<br><br>";
+
+			require("template/".$OJ_TEMPLATE."/error.php");
+			exit(0);
+		}
+	}
+
+	if (!$contest_ok) {
+		$view_errors = "<center>";
+		$view_errors .= "<h3>$MSG_CONTEST_ID : $view_cid - $view_title</h3>";
+		$view_errors .= "<p>$view_description</p>";
+		$view_errors .= "<span class=text-danger>$MSG_PRIVATE_WARNING</span>";
+
+		$view_errors .= "<br><br>";
+
+		$view_errors .= "<div class='btn-group'>";
+		$view_errors .= "<a href=contestrank.php?cid=$view_cid class='btn btn-primary'>$MSG_STANDING</a>";
+		$view_errors .= "<a href=contestrank-oi.php?cid=$view_cid class='btn btn-primary'>OI$MSG_STANDING</a>";
+		$view_errors .= "<a href=conteststatistics.php?cid=$view_cid class='btn btn-primary'>$MSG_STATISTICS</a>";
+		$view_errors .= "</div>";
+
+		$view_errors .= "<br><br>";
+		$view_errors .= "<table align=center width=80%>";
+		$view_errors .= "<tr align='center'>";
+		$view_errors .= "<td>";
+		$view_errors .= "<form class=form-inline method=post action=contest.php?cid=$cid>";
+		$view_errors .= "<input class=input-mini type=password name=password value='' placeholder=$MSG_CONTEST-$MSG_PASSWORD>";
+		$view_errors .= "<button class='form-control'>$MSG_SUBMIT</button>";
+		$view_errors .= "</form>";
+		$view_errors .= "</td>";
+		$view_errors .= "</tr>";
+		$view_errors .= "</table>";
+		$view_errors .= "<br>";
+
+		require("template/".$OJ_TEMPLATE."/error.php");
+		exit(0);
+	}
+
+
+	/**
+	 * 修改人：王春祥
+	 * 修改时间：2021/1/19
+	 * 修改目的：引入是否加入比赛判断
+	 */
+	include("contest_login_judge.php");
+	//结束
 	
 	//$sql = "SELECT * FROM (SELECT `problem`.`title` AS `title`,`problem`.`problem_id` AS `pid`,source AS source, contest_problem.num as pnum FROM `contest_problem`,`problem` WHERE `contest_problem`.`problem_id`=`problem`.`problem_id` AND `contest_problem`.`contest_id`=? ORDER BY `contest_problem`.`num`) problem LEFT JOIN (SELECT problem_id pid1,count(distinct(user_id)) accepted FROM solution WHERE result=4 AND contest_id=? GROUP BY pid1) p1 ON problem.pid=p1.pid1 LEFT JOIN (SELECT problem_id pid2,count(1) submit FROM solution WHERE contest_id=? GROUP BY pid2) p2 ON problem.pid=p2.pid2 ORDER BY pnum";//AND `problem`.`defunct`='N'
 
@@ -101,19 +199,14 @@ if (isset($_GET['cid'])) {
 		isset($_SESSION[$OJ_NAME.'_'."m$cid"])||
 		isset($_SESSION[$OJ_NAME.'_'."source_browser"])||
 		isset($_SESSION[$OJ_NAME.'_'."contest_creator"])
-	   ) $noip=false;
-	foreach($result as $row) {
+	   ) $noip=false;   //判断noip比赛
+	
+	foreach($result as $row)   //加载问题
+ 	{
 		$view_problemset[$cnt][0] = "";
-		if (isset($_SESSION[$OJ_NAME.'_'.'user_id'])){
-                        $ac=check_ac($cid,$cnt,$noip);
-                        $sub="";
-                        if($ac!="") $sub="?";
-                        if($noip)
-                          	$view_problemset[$cnt][0] = "$sub";
-                        else
-                          	$view_problemset[$cnt][0] = "$ac" ;
-
-		}else
+		if (isset($_SESSION[$OJ_NAME.'_'.'user_id']))
+			$view_problemset[$cnt][0] = check_ac($cid,$cnt,$noip);
+		else
 			$view_problemset[$cnt][0] = "";
 
 
@@ -132,10 +225,9 @@ if (isset($_GET['cid'])) {
 
 			$tresult = pdo_query($sql, $tpid);
 
-			if (intval($tresult) != 0 && !isset($_SESSION[$OJ_NAME.'_'."m$cid"]) ) { 
-				//if the problem will be use remained contes/exam don't show to other teachers and students
-				$view_problemset[$cnt][1] = $PID[$cnt]; //hide the title after contest
-				$view_problemset[$cnt][2] = '--using in another private contest--';
+			if (intval($tresult) != 0) { //if the problem will be use remained contes/exam
+				$view_problemset[$cnt][1] = $PID[$cnt]; //hide
+				$view_problemset[$cnt][2] = '----';
 			}
 			else {
 				$view_problemset[$cnt][1] = "<a href='problem.php?id=".$row['problem_id']."'>".$PID[$cnt]."</a>";
@@ -143,14 +235,22 @@ if (isset($_GET['cid'])) {
 			}
 		}
 
-		//$view_problemset[$cnt][3] = $row['source'];
+		$view_problemset[$cnt][3] = $row['source'];
 
 		if (!$noip)
-			$view_problemset[$cnt][3] = $row['accepted'];
+			$view_problemset[$cnt][4] = $row['accepted'];
 		else
-			$view_problemset[$cnt][3] = "";
+			$view_problemset[$cnt][4] = "";
     
-    $view_problemset[$cnt][4] = $row['submit'];
+	$view_problemset[$cnt][5] = $row['submit'];
+	/**
+	 * 修改人：王春祥
+	 * 修改日期：2021/1/28
+	 * 修改内容：训练赛期间隐去提交数目和AC数目
+	 */
+	if($now<$ftraining_date)
+		$view_problemset[$cnt][5]=$view_problemset[$cnt][4]="";
+	//结束
     $cnt++;
   }
 }
@@ -159,7 +259,7 @@ else {
 	if (isset($_GET['page']))
 		$page = intval($_GET['page']);
 
-	$page_cnt = 25;
+	$page_cnt = 10;
 	$pstart = $page_cnt*$page-$page_cnt;
 	$pend = $page_cnt;
 	$rows = pdo_query("select count(1) from contest where defunct='N'");
@@ -182,36 +282,13 @@ else {
 
 		foreach ($result as $row) {
 			$mycontests .= ",".$row[0];
-	        }
+	  }
 
 		$len = mb_strlen($OJ_NAME.'_');
-                                $user_id = $_SESSION[ $OJ_NAME . '_' . 'user_id' ];
-
-                if($user_id){
-                        // 已登录的
-                        $sql = "SELECT * FROM `privilege` WHERE `user_id`=?";
-                        $result = pdo_query( $sql, $user_id );
-
-                        // 刷新各种权限
-                        foreach ( $result as $row ){
-                                if(isset($row[ 'valuestr' ])){
-                                        $_SESSION[ $OJ_NAME . '_' . $row[ 'rightstr' ] ] = $row[ 'valuestr' ];
-                                }else {
-                                        $_SESSION[ $OJ_NAME . '_' . $row[ 'rightstr' ] ] = true;
-                                }
-                        }
-                       if(isset($_SESSION[ $OJ_NAME . '_vip' ])) {  // VIP mark can access all [VIP] marked contest
-                                $sql="select contest_id from contest where title like '%[VIP]%'";
-                                $result=pdo_query($sql);
-                                foreach ($result as $row){
-                                        $_SESSION[ $OJ_NAME . '_c' .$row['contest_id'] ] = true;
-                                }
-                        };
-                }
 
 		foreach ($_SESSION as $key => $value) {
-			if ((mb_substr($key,$len,1)=='m' || mb_substr($key,$len,1)=='c') && intval(mb_substr($key,$len+1))>0) {
-                         	//echo substr($key,1)."<br>";
+			if (($key[$len]=='m' || $key[$len]=='c') && intval(mb_substr($key,$len+1))>0) {
+				//echo substr($key,1)."<br>";
 				$mycontests .= ",".intval(mb_substr($key,$len+1));
 			}
 		}
@@ -220,20 +297,21 @@ else {
 
 		if (strlen($mycontests)>0)
 			$mycontests=substr($mycontests,1);
-		if (isset($_GET['my'])&&$mycontests!="")
-	  		if(isset($_GET['my'])) $wheremy=" and( contest_id in ($mycontests) or user_id='".$_SESSION[$OJ_NAME.'_user_id']."')";
+
+		if (isset($_GET['my']))
+			$wheremy = " and contest_id in ($mycontests)";
 	}
 
-  $sql = "SELECT * FROM `contest` WHERE `defunct`='N' ORDER BY `contest_id` DESC LIMIT 1000";
+  $sql = "SELECT * FROM `contest` WHERE `defunct`='N'  AND `ftraining_date` is not null ORDER BY `contest_id` DESC LIMIT 1000";
 
 	if ($keyword) {
-		$sql = "SELECT *  FROM contest WHERE contest.defunct='N' AND contest.title LIKE ? $wheremy  ORDER BY contest_id DESC";
+		$sql = "SELECT *  FROM contest WHERE contest.defunct='N' AND contest.title LIKE ? $wheremy  AND `ftraining_date` is not null ORDER BY contest_id DESC";
 		$sql .= " limit ".strval($pstart).",".strval($pend); 
 
 		$result = pdo_query($sql,$keyword);
 	}
 	else {
-		$sql = "SELECT *  FROM contest WHERE contest.defunct='N' $wheremy  ORDER BY contest_id DESC";
+		$sql = "SELECT *  FROM contest WHERE contest.defunct='N' $wheremy  AND `ftraining_date` is not null ORDER BY contest_id DESC";
 		$sql .= " limit ".strval($pstart).",".strval($pend); 
 		//echo $sql;
 		$result = mysql_query_cache($sql);
