@@ -5,11 +5,9 @@
     require_once('./include/db_info.inc.php');
         require_once('./include/setlang.php');
         $view_title= $MSG_CONTEST.$MSG_RANKLIST;
-	$show_title= $view_title;
         $title="";
         require_once("./include/const.inc.php");
         require_once("./include/my_func.inc.php");
-	require_once("./include/memcache.php");
 class TM{
         var $solved=0;
         var $time=0;
@@ -19,7 +17,7 @@ class TM{
         var $user_id;
         var $nick;
 	var $total;
-        function __construct(){
+        function TM(){
                 $this->solved=0;
                 $this->time=0;
                 $this->p_wa_num=array(0);
@@ -27,11 +25,11 @@ class TM{
                 $this->p_pass_rate=array(0);
 		$this->total=0;
         }
-        function Add($pid,$sec,$res,$result){
+        function Add($pid,$sec,$res){
 //              echo "Add $pid $sec $res<br>";
                 if (isset($this->p_ac_sec[$pid])&&$this->p_ac_sec[$pid]>0)
                         return;
-                if ($result!=4){
+                if ($res*100<99){
                         if(isset($this->p_pass_rate[$pid])){
                                 if($res>$this->p_pass_rate[$pid]){
 					$this->total-=$this->p_pass_rate[$pid]*100;
@@ -55,11 +53,10 @@ class TM{
                         if(isset($this->p_pass_rate[$pid])){
 				$this->total-=$this->p_pass_rate[$pid]*100;
 			}else{
-				$this->p_pass_rate[$pid]=$res*100;
+				$this->p_pass_rate[$pid]=$res;
 			}
 				
-			$this->total+=$res*100;
-			$this->p_pass_rate[$pid]=$res;
+			$this->total+=100;
 			$this->time+=$sec+$this->p_wa_num[$pid]*1200;
 //                      echo "Time:".$this->time."<br>";
 //                      echo "Solved:".$this->solved."<br>";
@@ -85,6 +82,7 @@ $cid=intval($_GET['cid']);
 
 if($OJ_MEMCACHE){
 		$sql="SELECT `start_time`,`title`,`end_time` FROM `contest` WHERE `contest_id`='$cid'";
+        require("./include/memcache.php");
         $result = mysql_query_cache($sql);
         if($result) $rows_cnt=count($result);
         else $rows_cnt=0;
@@ -108,7 +106,6 @@ if ($rows_cnt>0){
         $start_time=strtotime($row['start_time']);
         $end_time=strtotime($row['end_time']);
         $title=$row['title'];
-	$view_title = $title;
         
 }
 if ($start_time==0){
@@ -118,7 +115,7 @@ if ($start_time==0){
 }
 
 if ($start_time>time()){
-        $view_errors= "$MSG_CONTEST $MSG_Contest_Pending!";
+        $view_errors= "Contest Not Started!";
         require("template/".$OJ_TEMPLATE."/error.php");
         exit(0);
 }
@@ -145,6 +142,7 @@ if (time() > $view_lock_time && time() < $end_time + $OJ_RANK_LOCK_DELAY) {
 }
 
 if($OJ_MEMCACHE){
+//        require("./include/memcache.php");
 		$sql="SELECT count(1) as pbc FROM `contest_problem` WHERE `contest_id`='$cid'";
         $result = mysql_query_cache($sql);
         if($result) $rows_cnt=count($result);
@@ -187,13 +185,11 @@ for ($i=0;$i<$rows_cnt;$i++){
 
                 $user_name=$n_user;
         }
-	if($row['result']!=4 && $row['pass_rate']>=0.95) $row['pass_rate']=0.95;
-        if($row['result']==4 && !( isset($OJ_CONTEST_TOTAL_100) && $OJ_CONTEST_TOTAL_100))
-		$row['pass_rate']=1.0;
-	if(time()<$end_time+$OJ_RANK_LOCK_DELAY&&$lock<strtotime($row['in_date']))
-        	   $U[$user_cnt]->Add($row['num'],strtotime($row['in_date'])-$start_time,0,0);
+	if($row['result']!=4 && $row['pass_rate']>=0.99) $row['pass_rate']=0;
+        if(time()<$end_time+$OJ_RANK_LOCK_DELAY&&$lock<strtotime($row['in_date']))
+        	   $U[$user_cnt]->Add($row['num'],strtotime($row['in_date'])-$start_time,0);
         else
-        	   $U[$user_cnt]->Add($row['num'],strtotime($row['in_date'])-$start_time,$row['pass_rate'],$row['result']);
+        	   $U[$user_cnt]->Add($row['num'],strtotime($row['in_date'])-$start_time,$row['pass_rate']);
        
 }
 usort($U,"s_cmp");
