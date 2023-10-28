@@ -130,7 +130,6 @@ if (!isset($_GET['cid'])) {
 
 // contest_id
 $cid = intval($_GET['cid']);
-if(isset($OJ_NO_CONTEST_WATCHER)&&$OJ_NO_CONTEST_WATCHER) require_once("contest-check.php");
 
 // 非管理员不能访问
 /*if (!isset($_SESSION[$OJ_NAME.'_'.'administrator'])) {
@@ -193,7 +192,7 @@ if (!$OJ_MEMCACHE) {
 
 // 还未开始
 if ($start_time > time()) {
-    $view_errors = "$MSG_CONTEST $MSG_Contest_Pending!";
+    $view_errors = "Contest Not Started!";
     require("template/" . $OJ_TEMPLATE . "/error.php");
     exit(0);
 }
