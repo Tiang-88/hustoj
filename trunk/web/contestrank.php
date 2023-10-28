@@ -6,7 +6,6 @@ require_once('./include/db_info.inc.php');
 require_once('./include/setlang.php');
 require_once("./include/const.inc.php");
 require_once("./include/my_func.inc.php");
-require_once("./include/memcache.php");
 
 $view_title = $MSG_CONTEST.$MSG_RANKLIST;
 
@@ -20,7 +19,7 @@ class TM {
 	var $user_id;
 	var $nick;
 
-	function __construct() {
+	function TM() {
 		$this->solved = 0;
 		$this->time = 0;
 		$this->p_wa_num = array(0);
@@ -30,8 +29,7 @@ class TM {
 	function Add($pid,$sec,$res) {
 		global $OJ_CE_PENALTY;
 		//echo "Add $pid $sec $res<br>";
-		if ($sec<0) return;  // restarted contest ignore previous submission
-		
+
 		if (isset($this->p_ac_sec[$pid]) && $this->p_ac_sec[$pid]>0)
 			return;
 
@@ -76,7 +74,7 @@ $cid = intval($_GET['cid']);
 
 if ($OJ_MEMCACHE) {
 	$sql = "SELECT `start_time`,`title`,`end_time` FROM `contest` WHERE `contest_id`=$cid";
-	
+	require("./include/memcache.php");
 	$result = mysql_query_cache($sql);
 
 	if ($result)
@@ -108,18 +106,17 @@ if ($rows_cnt>0) {
 	$start_time = strtotime($row['start_time']);
 	$end_time = strtotime($row['end_time']);
 	$title = $row['title'];
-	$view_title = $title;
 }
 
 if (!$OJ_MEMCACHE)
 	if ($start_time==0) {
-		$view_errors = "Wrong $MSG_CONTEST id";
+		$view_errors = "No Such Contest";
 		require("template/".$OJ_TEMPLATE."/error.php");
 		exit(0);
 	}
 
 if ($start_time>time()) {
-	$view_errors = "$MSG_CONTEST $MSG_Contest_Pending!";
+	$view_errors = "Contest Not Started!";
 	require("template/".$OJ_TEMPLATE."/error.php");
 	exit(0);
 }
@@ -151,7 +148,7 @@ if (time()>$view_lock_time && time()<$end_time+$OJ_RANK_LOCK_DELAY) {
 
 if ($OJ_MEMCACHE) {
 	$sql = "SELECT count(1) as pbc FROM `contest_problem` WHERE `contest_id`='$cid'";
-	
+	//require("./include/memcache.php");
 	$result = mysql_query_cache($sql);
 	
 	if ($result)
